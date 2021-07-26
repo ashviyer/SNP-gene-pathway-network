@@ -172,7 +172,7 @@ commandsRun(ApplyStyle.cmd)
 ##      Pink dotted - SNP -gene association
 ##      Violet - Gene pathway association
 ```
-## NOTE : The WikiPathway linkset is the 2019 version and hence has some of the Gene IDs undocumented leading to unalbelled nodes in the uploaded network. These unlabelled nodes were manually removed using select --> nodes --> Hide selected nodes option. 
+## NOTE : The WikiPathway linkset is the 2019 version and hence has some of the Gene IDs undocumented leading to unlabelled nodes in the uploaded network. These unlabelled nodes were manually removed using Select --> Nodes --> Hide selected nodes option. 
 
 ## Save images and session
 ```{r}
@@ -181,7 +181,7 @@ exportImage(png.file,'PNG', zoom = 500)
 session.file <- file.path(getwd(), "SNP-gene pathway.cys")
 saveSession(session.file)
 
-## NOTE: The network image and session does get saved in the workign directory despite the message 'failed to execute:...'.
+## NOTE: The network image and session does get saved in the working directory despite the message 'failed to execute:...'.
 
 ```
 

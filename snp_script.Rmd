@@ -1,0 +1,189 @@
+---
+title: 'SNP-gene pathway network'
+author: "aish181095"
+date: "July 21, 2021"
+version: 1.0
+---
+  
+################################
+# Tested with 
+# Cytoscape version 3.7.2
+# CyTargetLinker version 4.1.0
+# R version 4.1.0
+# RCy3 version 2.12.3
+# bioMart version 2.48.2
+################################
+
+
+
+#Set up working directory 
+```{r set working directory}
+if(!"knitr" %in% installed.packages()){
+  install.packages("knitr")
+}
+library(knitr)
+knitr:::input_dir()
+```
+
+## Load packages
+```{r setup, include=FALSE}
+if(!"biomaRt" %in% installed.packages()){
+  install.packages("biomaRt", "limma", "RCy3", "tidyr")
+}
+library(biomaRt)
+library(limma)
+library(RCy3)
+library(tidyr)
+```
+
+## Import SNP variant list
+```{r}
+#Import variant file
+variants <- read.delim("variant_list.txt",header=FALSE)
+```
+
+
+## Get the genes associated with the SNP variants
+```{r}
+listMarts()#get list of marts 
+
+snpmart = useMart("ENSEMBL_MART_SNP", dataset = "hsapiens_snp")
+
+listAttributes(snpmart) #get the attributes present in 'hsapien_snp' dataset.
+listFilters(snpmart) #get list of filters present in 'hsapien_snp' dataset. 
+ 
+# Genes associated with the SNP variants
+filter_snp<-getBM(attributes = c("refsnp_id","associated_gene"),
+                  filters = "snp_filter",
+                  values = variants,
+                  mart = snpmart)
+
+# Remove NAs
+filter_snp_complete<-complete.cases(filter_snp)
+snp <- filter_snp[filter_snp_complete,]
+
+# Convert multiple string cells to single cells
+snp_list<-separate_rows(snp, associated_gene, convert = TRUE)
+
+# Remove empty cells 
+snp_gene_list=snp_list[-which(snp_list$associated_gene == ""), ]
+```
+
+## Get ENSEMBL gene Ids from gene symbols
+```{r}
+ensembl<-useMart("ensembl",dataset ="hsapiens_gene_ensembl")
+annotate<-getBM(attributes=c('hgnc_symbol','ensembl_gene_id','description'),
+                filters='hgnc_symbol',
+                values=snp_gene_list$associated_gene,
+                mart=ensembl)
+
+# Identify genes for which IDs were not obtained
+unique_genes<- data.frame(unique(snp_gene_list[, 2]))
+genes_not_present<- unique_genes$associated_gene[!(unique_genes$associated_gene %in% annotate$hgnc_symbol)]
+# Two genes: 'APOcluster' and 'PVRL2' not identified in the ENSEMBL database
+# NOTE : When querying the PVRL2 gene name with ENSEMBL database the gene name was identified to be a 'Gene synonym'.
+
+
+# Get Gene symbol from Gene synonym
+alias2Symbol("PVRL2")
+
+
+#Replace PVRL2 gene synonym with its gene symbol 'NECTIN2'
+snp_gene_list$associated_gene <- replace(snp_gene_list$associated_gene, 20,'NECTIN2')
+snp_gene_list <- snp_gene_list[-c(10),]
+```
+
+# Get the ENSEMBLE gene IDs from Gene symbols (again after replacing)
+```{r}
+annotate<-getBM(attributes=c('hgnc_symbol','ensembl_gene_id','description'),
+                filters='hgnc_symbol',
+                values=snp_gene_list$associated_gene,
+                mart=ensembl)
+
+# Add the ENSEMBL IDs to the 'df' dataframe.
+gene1<- match(snp_gene_list$associated_gene, annotate$hgnc_symbol, nomatch = 0)
+snp_gene_list$ensemble_id<-annotate$ensembl_gene_id[gene1];
+snp_gene_list <- unique(snp_gene_list[,1:3])
+```
+
+```{r}
+# create dataframe for nodes (combining Gene IDs and SNP IDs)
+nodes_snp<- data.frame(unique(snp_gene_list[, 1]))
+colnames(nodes_snp)<-c("id")
+annotate_id<-data.frame(annotate$ensembl_gene_id)
+colnames(annotate_id)<-c("id")
+nodes<-rbind(nodes_snp,annotate_id)
+```
+
+
+## check cytoscape connection
+```{r test connection}
+cytoscapePing()
+if("cytargetlinker" %in% commandsHelp("")) print("Success: the CyTargetLinker app is installed") else print("Warning: CyTargetLinker app is not installed. Please install the CyTargetLinker app before proceeding.")
+```
+
+## Load the SNP - Gene network on Cytoscape
+```{r test connection}
+# Nodes (group by SNP IDs and ENSEMBLE Gene IDs)
+snp_gene_nodes <- data.frame(id=nodes$id,
+                        group=c(replicate(nrow(nodes_snp), "S"),replicate(nrow(annotate_id), "G")),
+                        stringsAsFactors = FALSE)
+
+# Edges : SNP - gene associations
+snp_gene_edges <- data.frame(source=snp_gene_list$refsnp_id,
+                        target=snp_gene_list$ensemble_id,
+                        interaction=replicate(nrow(snp_gene_list), "associated"),
+                        stringsAsFactors = FALSE)
+createNetworkFromDataFrames(snp_gene_nodes,snp_gene_edges, title="snp gene network", collection="DataFrame Example")
+```
+
+## Extend network with pathway information
+```{r}
+wp <- file.path(getwd(), "LinkSets", "wikipathways-20190610-hsa.xgmml")
+CTLextend.cmd = paste('cytargetlinker extend idAttribute="shared name" linkSetFiles="', wp, '" network=current direction=SOURCES', sep="")
+commandsRun(CTLextend.cmd)
+layoutNetwork()
+```
+## Filter genes without any pathway information
+```{r}
+filter1.cmd = "network select edgeList=all"
+filter2.cmd = "network select extendEdges=true"
+filter3.cmd = "network create nodeList=selected edgeList=selected networkName=selection source=current"
+
+commandsRun(filter1.cmd)
+commandsRun(filter2.cmd)
+commandsRun(filter3.cmd)
+```
+## Apply visual style
+```{r}
+vizstyle.file <- file.path(getwd(), "VizStyles", "styles.xml")
+LoadStyle.cmd = paste('vizmap load file file="',vizstyle.file,'"', sep="")
+commandsRun(LoadStyle.cmd)
+
+ApplyStyle.cmd = 'vizmap apply styles="myStyle"'
+commandsRun(ApplyStyle.cmd)
+
+## NOTE: Nodes shape and color
+##       Orange triangle - SNP variant
+##       Green round square - Gene symbol
+##       Yellow circle - Pathway name
+
+##      Edges:
+##      Pink dotted - SNP -gene association
+##      Violet - Gene pathway association
+```
+## NOTE : The WikiPathway linkset is the 2019 version and hence has some of the Gene IDs undocumented leading to unalbelled nodes in the uploaded network. These unlabelled nodes were manually removed using select --> nodes --> Hide selected nodes option. 
+
+## Save images and session
+```{r}
+png.file <- file.path(getwd(), "SNP-gene pathway.png")
+exportImage(png.file,'PNG', zoom = 500)
+session.file <- file.path(getwd(), "SNP-gene pathway.cys")
+saveSession(session.file)
+
+## NOTE: The network image and session does get saved in the workign directory despite the message 'failed to execute:...'.
+
+```
+
+
+

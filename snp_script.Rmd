@@ -152,6 +152,7 @@ commandsRun(filter1.cmd)
 commandsRun(filter2.cmd)
 commandsRun(filter3.cmd)
 ```
+## Apply visual style
 ```{r}
 vizstyle.file <- file.path(getwd(), "VizStyles", "styles.xml")
 LoadStyle.cmd = paste('vizmap load file file="',vizstyle.file,'"', sep="")

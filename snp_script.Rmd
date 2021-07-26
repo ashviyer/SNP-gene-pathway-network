@@ -178,6 +178,8 @@ exportImage(png.file,'PNG', zoom = 500)
 session.file <- file.path(getwd(), "SNP-gene pathway.cys")
 saveSession(session.file)
 
+## NOTE: The network image and session does get saved in the workign directory despite the message 'failed to execute:...'.
+
 ```
 
 
